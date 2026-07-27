@@ -3,46 +3,52 @@ using LinearAlgebra
 using HomotopyContinuation
 using Plots 
 
-#PRE: list of points vertices that spans the polytope of which we want to know the area
-#POST: returns are of the polytope spanned by "vertices"
+# PRE: V is a collection of vertices (points) defining a full-dimensional convex polytope.
+# POST: Returns the volume of the convex hull of the vertices in V.
 function areaofpolyhedra(V)
     P = convex_hull(QQ,V)
     return volume(P)
 end
 
-#PRE: a point v and coefficients a,b,c defining an hyperplane ax+by+c=0
-#POST: returns the dot product (a b c). (v 1)
-function inner_product(v,a)
+# PRE: v is a point, and h is a vector of coefficients defining a hyperplane
+#      h₁x₁ + ⋯ + hₙxₙ = t, where h = [h₁, …, hₙ, -t].
+# POST: Returns the evaluation of the hyperplane equation at v, i.e., the inner
+#       product h ⋅ (v, -1). The result is zero if v lies on the hyperplane,
+#       positive or negative depending on the side of the hyperplane.
+function inner_product(v,h)
     S = parent(v[1])
     v_lift = [S(x) for x in v]
-    push!(v_lift, S(1))
-    s = sum(a[i]*v_lift[i] for i in 1:length(a))
+    push!(v_lift, -S(1))
+    s = sum(h[i]*v_lift[i] for i in 1:length(h))
     return s
 end
 
-#PRE: list of points vertices that spans the polytope 
-#POST: returns the points embedded in R^3
+# PRE: V is a collection of points in R^d.
+# POST: Returns the collection {(v, -1) : v ∈ V} in R^{d+1}.
 function vertex_embed(V)
     embedding = Vector{Vector{QQFieldElem}}()
     for v in V
         #println(v)
         v_lift = copy(v)
         #println(v_lift)
-        push!(v_lift,1)
+        push!(v_lift,-1)
         push!(embedding,v_lift)
     end
     return embedding
 end
 
-#PRE: list of points vertices that spans the polytope and let a,b,c be the coefficients that describe the hyperplane H={ax+by+c=0}
-#POST: returns a vector containing the edges that are cut by the given hyperplane H
-function hyperplane_intersect(V,a)
+# PRE: V is a collection of vertices spanning a polytope, and h is a vector of
+#      coefficients defining the hyperplane H = {x : h ⋅ (x, -1) = 0}.
+# POST: Returns the edges of the convex hull of V whose endpoints lie on
+#       opposite sides of H (or with one endpoint on H), i.e., the edges
+#       intersected by the hyperplane H.
+function hyperplane_intersect(V,h)
 	P = convex_hull(QQ,V)
 	cut = []
     
 	for e in faces(P, Oscar.ambient_dim(P)-1)
         #println(e)
-		s = [inner_product(collect(v),a) for v in vertices(e)]
+		s = [inner_product(collect(v),h) for v in vertices(e)]
         t = 0
         #find the first non-zero value in the vector s
         for i in 1:length(s)
@@ -65,19 +71,20 @@ function hyperplane_intersect(V,a)
 	end
 	return cut #Chiara: this now outputs two edges instead of just the indices of the corresponding vertices
 end
-
     
-#PRE: list of points vertices that spans the polytope and let a,b,c be the coefficients that describe the hyperplane H={ax+by+c=0}
-#POST: returns a vector containing the exact newpoints where H cuts the polygon spanned by P
-function hyperplane_intersectpoints(V,a)
-    facets = hyperplane_intersect(V,a)
+# PRE: V is a collection of vertices spanning a polytope, and h is a vector of
+#      coefficients defining the hyperplane H = {x : h ⋅ (x, -1) = 0}.
+# POST: Returns the distinct intersection points between H and the edges of the
+#       convex hull of V.
+function hyperplane_intersectpoints(V,h)
+    facets = hyperplane_intersect(V,h)
     newpoints = Vector{Vector{QQFieldElem}}()
     points = Vector{Vector{QQFieldElem}}()
     for facet in facets
         for f in faces(facet,Oscar.ambient_dim(facet)-2)
             v = [collect(vv) for vv in vertices(f)]
-            s1 = inner_product(v[2],a)
-            s2 = inner_product(v[1],a)
+            s1 = inner_product(v[2],h)
+            s2 = inner_product(v[1],h)
             if s1 * s2 <= 0 && !(s1 == 0 && s2 == 0)
                 l = s1 //(s1 - s2)
                 p = [l*v[1][i] + (1-l)*v[2][i] for i in 1:length(v[1])]
@@ -93,27 +100,29 @@ function hyperplane_intersectpoints(V,a)
 return newpoints
 end
 
-#PRE: list of points vertices that spans the polytope and let a be the coefficients that describe the hyperplane H={a \cdot(x,1)=0}
-#POST: returns the area of the polygon lying above the hyperplane H
-function positive_areaofcut(V,a)
-    newpoints = hyperplane_intersectpoints(V,a)
+# PRE: V is a collection of vertices spanning a polytope, and h is a vector of
+#      coefficients defining the hyperplane H = {x : h ⋅ (x, -1) = 0}.
+# POST: Returns the volume of P(h < 0), i.e. P ∩ {x : h ⋅ (x,-1) < 0}.
+function negative_areaofcut(V,h)
+    newpoints = hyperplane_intersectpoints(V,h)
     points = Vector{Vector{QQFieldElem}}()
     for v in V
-        s = inner_product(v,a)
-        if s > 0
+        s = inner_product(v,h)
+        if s < 0
             push!(points, v)        
         end
     end
     for v in newpoints
         push!(points, v)
     end    
-    Pplus = convex_hull(QQ, points)
-    return(volume(Pplus))
+    Pneg = convex_hull(QQ, points)
+    return(volume(Pneg))
 end    
 
 
-#PRE: list of vertices that span the polytope 
-#POST: returns the maximal chambers of the calculated hyperplane arrangement
+# PRE: V is a collection of vertices spanning a polytope in R^d.
+# POST: Returns the maximal open chambers of the hyperplane arrangement
+#       induced by the hyperplanes defined by the embedded vertices (v, -1).
 function get_chambers(V)
     n = length(V)
     embed = vertex_embed(V)
@@ -127,53 +136,65 @@ function get_chambers(V)
 end
 
 
-#PRE: list of vertices that span the polytope 
-#POST: returns one vector for all nonempty maximal chambers of the calculated hyperplane arrangement
+# PRE: V is a collection of vertices defining a polytope in R^d.
+# POST: Returns a collection of pairs (C, h), where C is a non-empty maximal
+#       chamber of the hyperplane arrangement generated by V and h is a
+#       representative vector lying in the interior of C.
 function representing_vectors(V)
     chambers = get_chambers(V)
     reprvec = []
+    d = length(V[1])
     for ch in chambers
-        u = sum(rays(ch))
-        edgecut = hyperplane_intersect(V, u)
-        if length(edgecut) > 2
-            #instead of push!(reprvec, u). This converts u from RayVEctor to Vector{QQFieldElem} -> needed?
-            push!(reprvec, (chamber = ch, repr = collect(QQFieldElem, u)))
+        h = sum(rays(ch))
+        edgecut = hyperplane_intersect(V, h)
+        if length(edgecut) > d-1
+            #instead of push!(reprvec, h). This converts h from RayVEctor to Vector{QQFieldElem} -> needed?
+            push!(reprvec, (chamber = ch, repr = collect(QQFieldElem, h)))
         end
     end
     return reprvec
 end
 
-#PRE: Give a simplex sx as a list of vertices and the fraction fiels S
-#POST: Calculate the volume of the simplex using the determinant formuala
+# PRE: sx is a list of k vertices defining a (k-1)-dimensional simplex, and S is
+#      the fraction field containing the coordinates of the vertices.
+# POST: Returns the volume of the simplex computed as det(M)/(k-1)!,
+#       where M is the matrix whose columns are the edge vectors
+#       sx[i] - sx[1] for i = 2,...,k.
 function vol_simplex(sx,S)
-    n = length(sx)
-    columns = [sx[i] - sx[1] for i in 2:n]
+    k = length(sx)
+    columns = [sx[i] - sx[1] for i in 2:k]
     M = reduce(hcat, columns)
     #println(M)
     M_matrix = matrix(S, M)
-    volume = Oscar.det(M_matrix)//factorial(n-1)
+    volume = Oscar.det(M_matrix)//factorial(k-1)
     return volume
 end
 
 
-#PRE: Give a list of vertices V and a vector u
-#POST: Calculate the points cut by the hyperplane u \cdot x as rational functions
-function symbolic_intersection(V,u)
-    n = length(V[1])
-    variables = ["a$i" for i in 1:n+1]
+# PRE: V is a collection of vertices spanning a polytope in R^d, and h is a
+#      vector representing a chamber of the hyperplane arrangement. The
+#      corresponding symbolic hyperplane has coefficients (h₁,...,h_{d+1})
+#      and is defined by H = {x : h ⋅ (x,-1) = 0}.
+# POST: Returns the numerical and the symbolic intersection points of 
+#       the edges of the polytope with the hyperplane H. The symbolic
+#       points are represented as rational functions in the hyperplane
+#       coefficients.
+function symbolic_intersection(V,h)
+    d = length(V[1])
+    variables = ["h$i" for i in 1:d+1]
     P = convex_hull(QQ,V)
     R, vars = polynomial_ring(QQ, variables)
     S = fraction_field(R)
 
     c = [S(v) for v in vars]
-    #this gives the facets getting cut by a hyperplane with coefficients lying in the chamber represented by u
+    #this gives the facets getting cut by a hyperplane with coefficients lying in the chamber represented by h
     
     points_num = Vector{Vector{QQFieldElem}}()
     points_sym = Vector{Vector{eltype(S)}}()
 
      for v in V
-        s = inner_product(v,u) 
-        if s > 0 #what about = 0?
+        s = inner_product(v,h) 
+        if s < 0 #what about = 0?
             push!(points_num, v)
             push!(points_sym, [S(x) for x in v])
         end
@@ -181,8 +202,8 @@ function symbolic_intersection(V,u)
         
     for f in faces(P, 1)
         v = [collect(vv) for vv in vertices(f)]
-        s1_num = inner_product(v[2],u)
-        s2_num = inner_product(v[1],u)
+        s1_num = inner_product(v[2],h)
+        s2_num = inner_product(v[1],h)
 
         s1 = inner_product([S(w) for w in v[2]],c)
         s2 = inner_product([S(w) for w in v[1]],c)
@@ -191,7 +212,7 @@ function symbolic_intersection(V,u)
             l_num = s1_num //(s1_num - s2_num)
             l_sym = s1 //(s1 - s2)
             
-            p_sym = [l_sym*S(v[1][i]) + (1-l_sym)*S(v[2][i]) for i in 1:length(v[1])
+            p_sym = [l_sym*S(v[1][i]) + (1-l_sym)*S(v[2][i]) for i in 1:length(v[1])]
             p_num = [l_num*v[1][i] + (1-l_num)*v[2][i] for i in 1:length(v[1])]
                             
             push!(points_num, p_num)
@@ -203,11 +224,15 @@ function symbolic_intersection(V,u)
 end
 
 
-#PRE: Give a list of vertices V and a representing vector for a chamber u
-#POST: Calculate the rational function that calculates the volume of the polyhedron cut if u is in a specific chamber 
-function local_volume(V,u)
+# PRE: V is a set of vertices defining a polytope in R^d, and h lies in a
+#      maximal open chamber of the hyperplane arrangement induced by V.
+# POST: Returns a pair (num, sym), where num is the exact volume of the cut
+#       polytope for the representative h, and sym is the rational function in
+#       the hyperplane coefficients giving the volume for any h in the same
+#       chamber.
+function local_volume(V,h)
     #now we take a look at the points numerically and symbolically
-    points_num, points_sym, S = symbolic_intersection(V,u)
+    points_num, points_sym, S = symbolic_intersection(V,h)
     #create a convex hull of the numerical intersection using the representative and take its triangulation 
     Pplus = convex_hull(QQ, points_num)
     #this gives me the indices of the vertices needed
@@ -229,32 +254,38 @@ function local_volume(V,u)
 end
 
 
-#PRE: Vertices V of a polygon
-#POST: For each chamber given by the hyperplane arrangement, give a rational function that calculates the upper volume of the polyhedra cut by an element 
-#in that chamber
+# PRE: V is a set of vertices defining a polytope P ⊂ R^d.
+# POST: Returns a list of triples (C, h, f_C), where C is a non-empty maximal
+#       chamber of the induced hyperplane arrangement, h is a representative
+#       vector in C, and f_C is the rational function giving the volume of the
+#       corresponding cut polytope for all hyperplanes with coefficients in C.
 function volume_functions(V)
     reprvec = representing_vectors(V)
     functions = []
 
     for item in reprvec
-        u = item.repr
+        h = item.repr
         ch = item.chamber
         
-        vol = local_volume(V,u)
+        vol = local_volume(V,h)
         vol_num = vol.num
         vol_sym = vol.sym
         volume = sign(vol_num)*vol_sym
         
-        push!(functions, (chamber = ch, repr = u, local_vol = volume))
+        push!(functions, (chamber = ch, repr = h, local_vol = volume))
     end
     return functions
 end
 
-#PRE: list of vertices that span the polytope 
-#POST: returns a vector that contains the equations 2p-Aq=0 where f=p/q is a local expression of the volume (i.e. the equations we need to solve to find the halving hyperplan), together with the corresponding chamber
+# PRE: V is a set of vertices defining a polytope in R^d.
+# POST: Returns a list of triples (C, h, g_C), where C is a chamber of the
+#       hyperplane arrangement, h is a representative vector of C, and
+#       g_C = 2p - A*q is the polynomial equation whose solutions correspond to
+#       hyperplanes in C that halve the volume of P, with f_C = p/q the local
+#       volume function and A = vol(P).
 function halving_equations(V)
-    n = length(V[1])
-    variables = ["a$i" for i in 1:n+1]
+    d = length(V[1])
+    variables = ["h$i" for i in 1:d+1]
     R, vars = polynomial_ring(QQ, variables)
     S = fraction_field(R)
 
@@ -273,8 +304,10 @@ function halving_equations(V)
     return equations
 end
 
-#PRE: A Polynomial f in oscar and the variables vars such that f \in k[vars]
-#POST: A polynomial converted to the type HomotopyContinuation
+# PRE: f ∈ k[x₁,...,xₙ] is an Oscar polynomial and vars = [x₁,...,xₙ] is the
+#      corresponding list of variables.
+# POST: Returns the same polynomial f represented as a
+#       HomotopyContinuation.Expression.
 function oscar_to_homcon(f,vars)
     result = HomotopyContinuation.Expression(0)
     n = length(vars)
@@ -289,64 +322,61 @@ function oscar_to_homcon(f,vars)
     return result
 end
 
-#PRE: Inputs are two polytopes P and Q
-#POST: The Hyperplanes which cut in half both P and Q
-function ham_sandwich(P,Q,T)
+# PRE: P_1,...,P_n are polytopes in R^d with n <= d and non-zero volume.
+# POST: Returns coefficient vectors h defining hyperplanes H = {x :
+#       h ⋅ (x,-1) = 0} such that each H divides every polytope P_i into two
+#       regions of equal volume.
+function ham_sandwich(polytopes)
+    d = Oscar.dim(polytopes[1])
+    @assert(length(polytopes) <= d)
+    vertices_list = [[collect(v) for v in vertices(P)] for P in polytopes]
 
-    V = [collect(v) for v in vertices(P)]
-    W = [collect(v) for v in vertices(Q)]
-    X = [collect(v) for v in vertices(T)]
-    
-    n = length(V[1])
-    if (length(V) < n || length(W) < n || length(X) < n)
-        println("One of the Polygons is degenerate")
-        return
+    for V in vertices_list
+        if (length(V) < d)
+            println("One of the Polygons is degenerate")
+            return
+        end
     end
-    #vogliamo risolvere il sistema di soluzioni usando il metodo dato da homotopycontinuation. Per fare ciò, è importante riuscire a convertire le funzioni da QQMPolyElem a Expression
-    Lp = halving_equations(V)
-    Lq = halving_equations(W)
-    Lt = halving_equations(X)
+    L = [halving_equations(V) for V in vertices_list]
 
-    half_V= Float64(areaofpolyhedra(V))/2
-    half_W= Float64(areaofpolyhedra(W))/2
-    half_X= Float64(areaofpolyhedra(X))/2
+    halves= [Float64(areaofpolyhedra(V))/2 for V in vertices_list]
 
-    @var a b c d
-    vars = [a,b,c,d]
+    @var h[1:d+1]
+    vars = collect(h)
     solutions = []
-
-    for p_tuple in Lp
-        cp = p_tuple.chamber
-        fp = p_tuple.volume_ch
-        fp_hc = oscar_to_homcon(fp, vars)
-        isempty(variables(fp_hc)) && continue
-        
-        for q_tuple in Lq
-            cq = q_tuple.chamber
-            fq = q_tuple.volume_ch
-            fq_hc = oscar_to_homcon(fq, vars)
-            isempty(variables(fq_hc)) && continue
-            
-            for t_tuple in Lt
-                ct = t_tuple.chamber
-                ft = t_tuple.volume_ch
-                ft_hc = oscar_to_homcon(ft, vars)
-                isempty(variables(ft_hc)) && continue
     
-                cc = intersect(intersect(cp, cq), ct)
+    for combinations in Iterators.product([Lp for Lp in L])
+        combinations = collect(combinations)
+        println("Type of combinations: ", typeof(combinations))
+        println("First element: ", combinations[1])
+        println("Type of first element: ", typeof(combinations[1]))
+        break  # just check the first one
+        fcts_hc = []
+        skip = false
 
-                if Oscar.dim(cc) > n
-                    F = HomotopyContinuation.solve([fp_hc, fq_hc, ft_hc, a^2 + b^2 +c^2 - 1])
-                    points = HomotopyContinuation.real_solutions(F) 
-                    in_cc = [v for v in points if v in cc]
-                    for v in in_cc
-                        u = [QQ(rationalize(BigFloat(x))) for x in v]
-                        #questa cosa mi fa un po' schif
-                        if (abs(Float64(positive_areaofcut(V,u)) - half_V) < 1e-6 &&
-                            abs(Float64(positive_areaofcut(W,u)) - half_W) < 1e-6 &&
-                            abs(Float64(positive_areaofcut(X,u)) - half_X) < 1e-6 && v[4] >= 1e-20)
-                            push!(solutions, v)
-                        end
+        for tuple in combinations
+            f_hc = oscar_to_homcon(tuple.volume_ch, vars)
+            if isempty(variables(f_hc))
+                skip = true
+                break
+            end
+            push!(fcts_hc, f_hc)
+        end
+        skip && continue
+        cc = reduce(intersect, [tuple.chamber for tuple in combinations])
+        
+        if Oscar.dim(cc) == d+1
+            normalizer = sum(vars[i]^2 for i in 1:d)-1
+            push!(fcts_hc, normalizer)
+            F = HomotopyContinuation.solve(fcts_hc)
+            points = HomotopyContinuation.real_solutions(F) 
+            #in_cc = [v for v in points if v in cc]
+            for sol in points
+               if sol in cc
+                coeff = [QQ(rationalize(BigFloat(x))) for x in sol]
+                cuts = [Float64(negative_areaofcut(V, coeff)) for V in vertices_list]
+                    if all(abs(cuts[i] - halves[i]) < 1e-6 for i in 1:length(polytopes))
+                        push!(solutions, sol)
                     end
                 end
             end
@@ -356,32 +386,66 @@ function ham_sandwich(P,Q,T)
 end
 
 
+# function main()
+#     V1 = [
+#     [0, 0, 0],
+#     [1, 0, 0],
+#     [0, 1, 0],
+#     [0, 0, 1]
+#     ]
+    
+#     V2 = [
+#     [1, 0, 0],
+#     [2, 0, 0],
+#     [1, 1, 0],
+#     [1, 0, 1]
+#     ]
+    
+#     V3 = [
+#     [0, 1, 0],
+#     [1, 1, 0],
+#     [0, 2, 0],
+#     [0, 1, 1]
+#     ]
+    
+    
+#     P = convex_hull(QQ, V1)
+#     Q = convex_hull(QQ, V2)
+#     T = convex_hull(QQ, V3)
+#     println(ham_sandwich([P,Q,T]))
+# end
+# main()
+
 function main()
     V1 = [
-    [0, 0, 0],
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 0, 1]
+        [QQ(4), QQ(1)],
+        [QQ(5), QQ(3)],
+        [QQ(2), QQ(4)],
+        [QQ(0), QQ(2)],
+        [QQ(1), QQ(1)]
     ]
     
     V2 = [
-    [1, 0, 0],
-    [2, 0, 0],
-    [1, 1, 0],
-    [1, 0, 1]
+        [QQ(-4), QQ(-3)],
+        [QQ(-2), QQ(-1)],
+        [QQ(1), QQ(-2)],
+        [QQ(2), QQ(-5)],
+        [QQ(-1), QQ(-6)],
+        [QQ(-3), QQ(-5)]
     ]
-    
-    V3 = [
-    [0, 1, 0],
-    [1, 1, 0],
-    [0, 2, 0],
-    [0, 1, 1]
-    ]
-    
     
     P = convex_hull(QQ, V1)
     Q = convex_hull(QQ, V2)
-    T = convex_hull(QQ, V3)
-    println(ham_sandwich(P,Q, T))
+    
+    solutions = ham_sandwich([P, Q])
+    println("Ham sandwich solutions: ", solutions)
+    
+    for (i, sol) in enumerate(solutions)
+        println("\nSolution $i: h = (", sol[1], ", ", sol[2], "), t = ", sol[3])
+        println("  Area cut of P = ", Float64(negative_areaofcut(V1, sol)))
+        println("  Area cut of Q = ", Float64(negative_areaofcut(V2, sol)))
+        println("  Half area of P = ", Float64(areaofpolyhedra(V1)/2))
+        println("  Half area of Q = ", Float64(areaofpolyhedra(V2)/2))
+    end
 end
 main()
