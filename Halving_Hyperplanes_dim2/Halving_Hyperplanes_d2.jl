@@ -3,23 +3,27 @@ using LinearAlgebra
 using HomotopyContinuation
 using Plots 
 
-#PRE: list of vertices that spans the polytope of which we want to know the area
-#POST: returns are of the polytope spanned by "vertices"
+# PRE: V is a set of points in R^2 whose convex hull defines the polygon P.
+# POST: Returns the area of P = conv(V).
 function areaofpolytope(V)
     P = convex_hull(QQ,V)
     return volume(P)
 end
 
-#PRE: a point v and coefficients a,b,c defining a hyperplane ax+by+c=0
-#POST: returns the dot product (a b c). (v 1)
+# PRE: v is a point in R^2, and a, b, c are coefficients defining the line
+#      H = {(x,y) : ax + by + c = 0}.
+# POST: Returns the value of the hyperplane equation evaluated at v, i.e.,
+#       (a,b,c) · (v₁,v₂,-1) = a*v₁ + b*v₂ - c.
 function inner_product(v,a,b,c)
-    v_lift = [v[1], v[2], QQ(1)]
+    v_lift = [v[1], v[2], QQ(-1)]
     s = dot([a,b,c],v_lift)
     return s
 end
 
-#PRE: list of points vertices that spans the polytope, and let a,b,c be the coefficients that describe the hyperplane H={ax+by+c=0}
-#POST: returns a vector containing information about the position of each vertex with respect to the hyperplane. Vertices with the same line lie on the same side
+# PRE: V is a set of vertices defining a polygon in R^2, and (a,b,c) defines
+#      the line H = {(x,y) : ax + by  = c}.
+# POST: Returns the sign of the evaluation of the line equation at each vertex
+#       of V, classifying each vertex as lying on one side of H or on H itself.
 function posvertices(V,a,b,c)
     pos = Int[]
     for v in V
@@ -29,19 +33,22 @@ function posvertices(V,a,b,c)
     return pos
 end
 
-#PRE: list of points vertices that spans the polytope 
-#POST: returns the points embedded in R^3
+# PRE: V is a collection of vertices in R^2 defining a polygon.
+# POST: Returns the points embedded in R^3 by mapping each vertex
+#       v = (x,y) to (x,y,-1).
 function vertex_embed(V)
     embedding = Vector{Vector{QQFieldElem}}()
     for v in V
-        v_lift = [v[1], v[2], QQ(1)]
+        v_lift = [v[1], v[2], QQ(-1)]
         push!(embedding,v_lift)
     end
     return embedding
 end    
 
-#PRE: list of points vertices that spans the polytope and let a,b,c be the coefficients that describe the hyperplane H={ax+by+c=0}
-#POST: returns a vector containing the edges that are cut by the given hyperplane H
+# PRE: V is a collection of vertices in R^2 defining a polygon, and a, b, c are
+#      coefficients defining the line H = {(x,y) : ax + by - c = 0}.
+# POST: Returns a vector containing the edges of the polygon that are intersected
+#       by the line H.
 function hyperplane_intersectedge(V,a,b,c)
 	P = convex_hull(QQ,V)
 	cut = []
@@ -55,8 +62,10 @@ function hyperplane_intersectedge(V,a,b,c)
 end
 
     
-#PRE: list of points vertices that spans the polytope and let a,b,c be the coefficients that describe the hyperplane H={ax+by+c=0}
-#POST: returns a vector containing the exact newpoints where H cuts the polygon spanned by P
+# PRE: V is a collection of vertices in R^2 defining a polygon, and a, b, c are
+#      coefficients defining the line H = {(x,y) : ax + by - c = 0}.
+# POST: Returns the exact intersection points between H and the edges
+#       of the polygon defined by the convex hull of V.
 function hyperplane_intersectpoints(V,a,b,c)
     edges = hyperplane_intersectedge(V,a,b,c)
     newpoints = Vector{Vector{QQFieldElem}}()
@@ -71,14 +80,15 @@ function hyperplane_intersectpoints(V,a,b,c)
 return newpoints
 end
 
-#PRE: list of points vertices that spans the polytope, and let a,b,c be the coefficients that describe the hyperplane H={ax+by+c=0}
-#POST: returns the area of the polygon lying above the hyperplane H
-function positive_areaofcut(V,a,b,c)
+# PRE: V is a set of vertices defining a polygon in R^2, and (a,b,c) defines
+#      the line H = {(x,y) : ax + by - c = 0}.
+# POST: Returns the area of the intersection conv(V) \cap H((a,b) < t).
+function negative_areaofcut(V,a,b,c)
     newpoints = hyperplane_intersectpoints(V,a,b,c)
     points = Vector{Vector{QQFieldElem}}()
     for v in V
         s = inner_product(v,a,b,c)
-        if s > 0
+        if s < 0
             push!(points, v)        
         end
     end
@@ -90,8 +100,9 @@ function positive_areaofcut(V,a,b,c)
 end    
 
 
-#PRE: list of vertices that span the polytope 
-#POST: returns the maximal chambers of the calculated hyperplane arrangement
+# PRE: V is a collection of vertices in R^2 spanning a polygon.
+# POST: Returns the maximal chambers of the hyperplane arrangement induced by
+#       the embedded vertices (v₁,v₂,-1) in R^3.
 function get_chambers(V)
     n = length(V)
     embed = vertex_embed(V)
@@ -105,25 +116,27 @@ function get_chambers(V)
 end
 
 
-#PRE: list of vertices that span the polytope 
-#POST: returns one vector for all nonempty maximal chambers of the calculated hyperplane arrangement
+# PRE: V is a set of vertices defining a polygon in R^2.
+# POST: Returns a collection of pairs (C,h), where C is a non-empty maximal
+#       chamber of the hyperplane arrangement induced by the lifted vertices
+#       (v₁,v₂,-1), and u is a representative vector lying in C.
 function representing_vectors(V)
     chambers = get_chambers(V)
     reprvec = []
     for ch in chambers
-        u = sum(rays(ch))
-        edgecut = hyperplane_intersectedge(V, u[1],u[2],u[3])
+        h = sum(rays(ch))
+        edgecut = hyperplane_intersectedge(V, h[1],h[2],h[3])
         if length(edgecut) == 2
-            #instead of push!(reprvec, u). This converts u from RayVEctor to Vector{QQFieldElem} -> needed?
-            push!(reprvec, (chamber = ch, repr = collect(QQFieldElem, u)))
+            push!(reprvec, (chamber = ch, repr = collect(QQFieldElem, h)))
         end
     end
     return reprvec
 end
 
 
-#PRE: V are the vertices of a polytope
-#POST: returns the vertices ordered. This might be clockwise or not.
+# PRE: V is a set of vertices defining a polygon in R^2.
+# POST: Returns a cyclic ordering of the vertices of conv(V), represented by their
+#       indices in V. The orientation of the ordering is not specified.
 function cyclic_order(V) 
     P = convex_hull(QQ,V)
     g = vertex_edge_graph(P)
@@ -153,9 +166,10 @@ function cyclic_order(V)
     return ord
 end
 
-##TO IMPROVE, IS NOT OPTIMAL, WORKS ONLY IF VERTICES ARE IN A CYCLIC ORDER##
-#PRE: list of vertices that span the polytope 
-#POST: returns the area of the spanned polytope without needing to create its convex hull
+
+# PRE: V is a list of vertices in R^2 ordered cyclically around a polygon.
+# POST: Returns the signed area of the polygon spanned by V. The sign depends
+#       on whether the vertices are ordered clockwise or counterclockwise.
 function shoelace(V)
     n = length(V)
     area = sum(V[i][1]*V[mod(i,n)+1][2] - 
@@ -164,8 +178,11 @@ function shoelace(V)
 end
 
 
-#PRE: list of vertices that span the polytope, field S and coefficients of the hyperplane a,b,c
-#POST: returns the condition of a vertex to be on the same side wrt to the hyperplane ax+by+c=0
+# PRE: V is a collection of vertices in R^2 defining a polygon, S is a field
+#      containing the coordinates, and a, b, c are coefficients defining the
+#      line H = {(x,y) : ax + by - c = 0}.
+# POST: Returns the vertices of V that lie on the positive side of H, i.e.,
+#       satisfy ax + by - c > 0, with coordinates converted to the field S.
 function points_above(V,S,a,b,c)
     points = Vector{Vector{eltype(S)}}()
         #using the representing vector, understand which points lie above the hyperplane, so that we can calculate the area cut
@@ -181,8 +198,12 @@ function points_above(V,S,a,b,c)
 end
 
     
-#PRE: list of vertices that span the polytope 
-#POST: returns the regular function that calculates the cut volume for each chamber
+# PRE: V is a set of vertices defining a polygon in R^2.
+# POST: Returns a list of triples (C,h,f_C), where C is a non-empty chamber of
+#       the hyperplane arrangement, h is a representative vector of C, and
+#       f_C(a,b,c) is the rational function giving the signed area of the part
+#       of conv(V) lying on the positive side of the line ax + by - c = 0 for all
+#       hyperplanes in C.
 function rational_vol_local(V)
     R, (a, b, c) = polynomial_ring(QQ, ["a", "b", "c"])
     S = fraction_field(R)
@@ -192,8 +213,8 @@ function rational_vol_local(V)
 
     for item in reprvectors
         r = item.chamber
-        u = item.repr
-        edgecut = hyperplane_intersectedge(V, u[1], u[2], u[3])
+        h = item.repr
+        edgecut = hyperplane_intersectedge(V, h[1], h[2], h[3])
         
         
         newpoints = Vector{Vector{eltype(S)}}()
@@ -202,7 +223,7 @@ function rational_vol_local(V)
             v = [S.(collect(vv)) for vv in vertices(e)]
             v_eval = [collect(vv) for vv in vertices(e)]
             l = (dot([a, b], v[2]) + c) //(dot([a, b], v[2]) - dot([a, b], v[1]))
-            l_eval = inner_product(v_eval[2],u[1], u[2], u[3]) //(inner_product(v_eval[2],u[1], u[2], u[3]) - inner_product(v_eval[1],u[1], u[2], u[3]))
+            l_eval = inner_product(v_eval[2],h[1], h[2], h[3]) //(inner_product(v_eval[2],h[1], h[2], h[3]) - inner_product(v_eval[1],h[1], h[2], h[3]))
             p = [l*v[1][i] + (1-l)*v[2][i] for i in 1:2]
             p_eval = [l_eval*v_eval[1][i] + (1-l_eval)*v_eval[2][i] for i in 1:2]
             push!(newpoints, p)
@@ -210,64 +231,75 @@ function rational_vol_local(V)
         end
 
         # pts = points_above(V, S, u[1], u[2], u[3])
-        push!(newpoints, points_above(V, S, u[1], u[2], u[3])...)
-        push!(newpoints_eval, points_above(V, QQ, u[1], u[2], u[3])...)
+        push!(newpoints, points_above(V, S, h[1], h[2], h[3])...)
+        push!(newpoints_eval, points_above(V, QQ, h[1], h[2], h[3])...)
     
         # now we order the points cyclically, using the evaluated vertices, and we check the sign of the shoelace function
         order = cyclic_order(newpoints_eval)
         sgn = sign(shoelace(newpoints_eval[order]))
     
         local_vol = sgn*shoelace(newpoints[order])
-        push!(fcts, (chamber = r, repr =u,  local_area = local_vol))
+        push!(fcts, (chamber = r, repr =h,  local_area = local_vol))
     end
     return fcts
 end
 
-#PRE: Let V be a set of vertices
-#POST: returns the representing vector u and its position with respect to the vertices, in other words, we calculate in which chamber u is contained. In altre parole pr ogni camera, calcolo le ineguaglianze che la descrivono, usando il vettore rappresentante
+# PRE: V is a set of vertices defining a polygon in R^2.
+# POST: Returns a list of triples (C,h,s), where C is a chamber of the
+#       hyperplane arrangement, h is a representative vector in C, and
+#       s records the signs of the evaluations
+#       (v₁,v₂,-1) · h for all vertices v \in V, giving the inequalities that
+#       define C.
 function chambers_conditions(V)
     chmb_sgn = []
     represent = representing_vectors(V)
 
     for item in represent
-        u = item.repr
-        sgn_u = []
+        h = item.repr
+        sgn_h = []
         for v in V
-            #where does u lie with respect to the perpendicular hyperplane spanned by v?
-            s = inner_product(v, u[1], u[2], u[3])
-            push!(sgn_u, sign(s))
+            #where does h lie with respect to the perpendicular hyperplane spanned by v?
+            s = inner_product(v, h[1], h[2], h[3])
+            push!(sgn_h, sign(s))
         end
-        push!(chmb_sgn, (chamber = item.chamber, repr = u, sgn = sgn_u))
+        push!(chmb_sgn, (chamber = item.chamber, repr = h, sgn = sgn_h))
     end
 
     return chmb_sgn
 end
 
 
-#PRE: Let V be a set of vertices
-#POST: returns the representing vector u of each chamber together with the corresponding inequalities. 
+# PRE: V is a set of vertices defining a polygon in R^2.
+# POST: Returns a list of triples (C,h,I_C), where C is a chamber of the
+#       hyperplane arrangement, h is a representative vector of C, and I_C is
+#       the collection of signed linear inequalities defining C, obtained from
+#       the signs of the evaluations (v₁,v₂,-1) · (a,b,c).
 function chambers_inequalities(V)
     R, (a, b, c) = polynomial_ring(QQ, ["a", "b", "c"])
     chmb_data = chambers_conditions(V)
 
     chmb_ineq = []
     for item in chmb_data
-        #consider the vector of signs which we calcolare i chambers_conditions(V)
+        #consider the vector of signs which we calculate in chambers_conditions(V)
         sgn = item.sgn
-        ineq_u = []
+        ineq_h = []
         for (i, v) in enumerate(V)
-            #for each vertex v=(v1,v2) we multiply the vector of signs of u 
+            #for each vertex v=(v1,v2) we multiply the vector of signs of h 
             s = inner_product(v, a, b, c)
-            push!(ineq_u, sgn[i] * s)
+            push!(ineq_h, sgn[i] * s)
         end
-        push!(chmb_ineq, (chamber = item.chamber, repr = item.repr, inequalities = ineq_u))
+        push!(chmb_ineq, (chamber = item.chamber, repr = item.repr, inequalities = ineq_h))
     end
     return chmb_ineq
 end
     
 
-#PRE: list of vertices that span the polytope 
-#POST: returns a vector that contains the equations 2p-Aq=0 where f=p/q is a local expression of the volume (i.e. the equations we need to solve to find the halving hyperplan), together with the corresponding chamber
+# PRE: V is a set of vertices defining a polygon in R^2.
+# POST: Returns a collection of tuples (C,u,g_C,I_C), where C is a chamber of
+#       the induced hyperplane arrangement, u is a representative vector of C,
+#       I_C is the set of inequalities defining C, and g_C(a,b,c)=0 is the
+#       equation characterising the lines that bisect the area of P for
+#       hyperplane coefficients (a,b,c) lying in C.function halving_hyperplanes(V)
 function halving_equations(V)
     R, (a, b, c) = polynomial_ring(QQ, ["a", "b", "c"])
     S = fraction_field(R)
@@ -286,8 +318,12 @@ function halving_equations(V)
     return equations
 end
 
-#PRE: The vertices spanning the polygon P
-#POST: It returns the chamber with the corrisponding representing vector, the inequalities describing the chamber and the local volume function for vecctors (a,b,c) in that chamber
+# PRE: V is a set of vertices defining a polygon in R^2.
+# POST: Returns a list of tuples (C,h,g_C,I_C), where C is a chamber of the
+#       hyperplane arrangement, h is a representative vector of C,
+#       I_C is the set of inequalities defining C, and g_C(a,b,c)=0 is the
+#       equation characterising the lines that divide conv(V) into two regions of
+#       equal area for coefficient vectors (a,b,c) contained in C.
 function halving_hyperplanes(V)
     equations = halving_equations(V)
     inequalities = chambers_inequalities(V)
@@ -310,8 +346,11 @@ function halving_hyperplanes(V)
 end
 
 
-#PRE:A Polynomial f in oscar and the variables vars such that f \in k[vars]
-#POST: A polynomial converted to the type HomotopyContinuation
+# PRE: f \in k[x_1,...,x_n] is an Oscar polynomial with rational coefficients, and
+#      vars = [x_1,...,x_n] is the corresponding variable list.
+# POST: Returns the same polynomial f represented as a
+#       HomotopyContinuation.Expression, preserving its coefficients and
+#       monomial terms.
 function oscar_to_homcon(f,vars)
     result = HomotopyContinuation.Expression(0)
     n = length(vars)
@@ -327,8 +366,8 @@ function oscar_to_homcon(f,vars)
 end
 
 
-#PRE: Inequality and points (a0, b0, c0) 
-#POST: Returns tree if (a0, b0, c0) satisfies ineq
+# PRE: ineq is a polynomial expression in R[a,b,c], and (a0,b0,c0) \in R^3.
+# POST: Returns whether ineq(a0,b0,c0) ≥ 0 (up to numerical tolerance).
 function sat_ineq(ineq, a0, b0, c0)
     epsilon = 1e-10
     vars = [a0, b0, c0]
@@ -344,8 +383,10 @@ function sat_ineq(ineq, a0, b0, c0)
     return result > -epsilon
 end
 
-#PRE: a collection of inequalities cc and a point sol we want to know if it satisfies cc
-#POST: returns if sol is contained in the chamber cc
+# PRE: cc is a collection of polynomial inequalities defining a chamber, and
+#      sol is a point (a,b,c) in R^3.
+# POST: Returns true if sol satisfies all inequalities in cc (and therefore lies
+#       in the chamber defined by cc), and false otherwise.
 function in_chamber(cc, sol)
     in_chamber = true
     for ineq in cc
@@ -357,8 +398,9 @@ function in_chamber(cc, sol)
 end
 
 
-#PRE: Inputs are two polytopes P and Q
-#POST: The Hyperplanes which cut in half both P and Q
+# PRE: P and Q are two non-degenerate polygons in R^2.
+# POST: Returns a collection of coefficient vectors (a,b,c) defining lines
+#       ax + by - c = 0 that simultaneously bisect the area of both P and Q.
 function ham_sandwich(P,Q)
     V = [collect(v) for v in vertices(P)]
     W = [collect(v) for v in vertices(Q)]
@@ -400,8 +442,9 @@ function ham_sandwich(P,Q)
     return solutions
 end
 
-#PRE: Takes the vertices points spanning a polygon
-#POST: returns a vector of points (x,y), where v=(x,y) are the vertices of the polygon
+# PRE: V is a set of points in R^2 defining a polygon P.
+# POST: Returns a pair (x,y) containing the cyclically ordered coordinates of
+#       the vertices of P.
 function plot_polygon(V)
     P = convex_hull(V)
     verts = vertices(P)
@@ -415,8 +458,8 @@ function plot_polygon(V)
     return (x = x_coords, y = y_coords)
 end
 
-#PRE: Take the points spanning two polygons V and W
-#POST: gives a plot of the two polygons in R^2
+# PRE: V and W are sets of points in R^2 defining polygons P and Q.
+# POST: Produces a planar plot showing the polygons P=conv(V) and Q=conv(W).
 function polygons_inplane(V,W)   
     P = convex_hull(QQ,V)
     Q = convex_hull(QQ,W)
@@ -431,15 +474,16 @@ function polygons_inplane(V,W)
     scatter!(fig, P2.x, P2.y, color=:blue, label="")
 end
 
-#PRE: Needs the hyperplane given by the coefficients in the vector u and the plot fig we want to complete
-#POST: Adds the hyperplane generated by u to the plane containing the polygons
+# PRE: fig is a plot containing polygons in R^2, and u = (u_1, u_2,u3) defines the
+#      line H = {(x,y) : u_1x + u_2y + u_3 = 0}.
+# POST: Adds the line H to fig.
 function plot_hyperplane(fig, u)
     x = range(-6, 6, length=100)
     if abs((u[2])) < 1e-10
         println("Division through 0")
         return
     end
-    y = [(-u[3] - u[1]*xi)/u[2] for xi in x]
+    y = [(u[3] - u[1]*xi)/u[2] for xi in x]
     plot!(fig, collect(x), y, label="halving", color=:green)
 end
 

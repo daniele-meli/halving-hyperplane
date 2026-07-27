@@ -5,17 +5,17 @@ using Plots
 
 #PRE: list of points vertices that spans the polytope of which we want to know the area
 #POST: returns are of the polytope spanned by "vertices"
-function areaofpolyhedra(V)
+function areaofpolytope(V)
     P = convex_hull(QQ,V)
     return volume(P)
 end
 
 #PRE: a point v and coefficients a,b,c defining an hyperplane ax+by+c=0
-#POST: returns the dot product (a b c). (v 1)
+#POST: returns the dot product (a b c). (v -1)
 function inner_product(v,a)
     S = parent(v[1])
     v_lift = [S(x) for x in v]
-    push!(v_lift, S(1))
+    push!(v_lift, -S(1))
     s = sum(a[i]*v_lift[i] for i in 1:length(a))
     return s
 end
@@ -28,7 +28,7 @@ function vertex_embed(V)
         #println(v)
         v_lift = copy(v)
         #println(v_lift)
-        push!(v_lift,1)
+        push!(v_lift,-1)
         push!(embedding,v_lift)
     end
     return embedding
@@ -94,13 +94,13 @@ return newpoints
 end
 
 #PRE: list of points vertices that spans the polytope and let a be the coefficients that describe the hyperplane H={a \cdot(x,1)=0}
-#POST: returns the area of the polygon lying above the hyperplane H
+#POST: returns the area of the polygon lying below the hyperplane H
 function positive_areaofcut(V,a)
     newpoints = hyperplane_intersectpoints(V,a)
     points = Vector{Vector{QQFieldElem}}()
     for v in V
         s = inner_product(v,a)
-        if s > 0
+        if s < 0
             push!(points, v)        
         end
     end
@@ -173,7 +173,7 @@ function symbolic_intersection(V,u)
 
      for v in V
         s = inner_product(v,u) 
-        if s > 0 #what about = 0?
+        if s < 0 #what about = 0?
             push!(points_num, v)
             push!(points_sym, [S(x) for x in v])
         end
@@ -191,7 +191,7 @@ function symbolic_intersection(V,u)
             l_num = s1_num //(s1_num - s2_num)
             l_sym = s1 //(s1 - s2)
             
-            p_sym = [l_sym*S(v[1][i]) + (1-l_sym)*S(v[2][i]) for i in 1:length(v[1])
+            p_sym = [l_sym*S(v[1][i]) + (1-l_sym)*S(v[2][i]) for i in 1:length(v[1])]
             p_num = [l_num*v[1][i] + (1-l_num)*v[2][i] for i in 1:length(v[1])]
                             
             push!(points_num, p_num)
@@ -203,7 +203,7 @@ function symbolic_intersection(V,u)
 end
 
 
-#PRE: Give a list of vertices V and a representing vector for a chamber u
+#PRE: List of vertices V and a representing vector for a chamber u
 #POST: Calculate the rational function that calculates the volume of the polyhedron cut if u is in a specific chamber 
 function local_volume(V,u)
     #now we take a look at the points numerically and symbolically
@@ -230,7 +230,7 @@ end
 
 
 #PRE: Vertices V of a polygon
-#POST: For each chamber given by the hyperplane arrangement, give a rational function that calculates the upper volume of the polyhedra cut by an element 
+#POST: For each chamber given by the hyperplane arrangement, give a rational function that calculates the upper volume of the polytope cut by an element 
 #in that chamber
 function volume_functions(V)
     reprvec = representing_vectors(V)
@@ -251,7 +251,7 @@ function volume_functions(V)
 end
 
 #PRE: list of vertices that span the polytope 
-#POST: returns a vector that contains the equations 2p-Aq=0 where f=p/q is a local expression of the volume (i.e. the equations we need to solve to find the halving hyperplan), together with the corresponding chamber
+#POST: returns a vector that contains the equations 2p-Aq=0 where f=p/q is a local expression of the volume (i.e. the equations we need to solve to find the halving hyperplane), together with the corresponding chamber
 function halving_equations(V)
     n = length(V[1])
     variables = ["a$i" for i in 1:n+1]
@@ -259,7 +259,7 @@ function halving_equations(V)
     S = fraction_field(R)
 
     vol_loc = volume_functions(V)
-    area = areaofpolyhedra(V)
+    area = areaofpolytope(V)
     equations = []
     
     for tuple in vol_loc
@@ -289,8 +289,8 @@ function oscar_to_homcon(f,vars)
     return result
 end
 
-#PRE: Inputs are two polytopes P and Q
-#POST: The Hyperplanes which cut in half both P and Q
+#PRE: Polytopes P, Q and T
+#POST: The hyperplanes that cut in half P, Q and T
 function ham_sandwich(P,Q,T)
 
     V = [collect(v) for v in vertices(P)]
@@ -307,9 +307,9 @@ function ham_sandwich(P,Q,T)
     Lq = halving_equations(W)
     Lt = halving_equations(X)
 
-    half_V= Float64(areaofpolyhedra(V))/2
-    half_W= Float64(areaofpolyhedra(W))/2
-    half_X= Float64(areaofpolyhedra(X))/2
+    half_V= Float64(areaofpolytope(V))/2
+    half_W= Float64(areaofpolytope(W))/2
+    half_X= Float64(areaofpolytope(X))/2
 
     @var a b c d
     vars = [a,b,c,d]
@@ -344,7 +344,7 @@ function ham_sandwich(P,Q,T)
                         #questa cosa mi fa un po' schif
                         if (abs(Float64(positive_areaofcut(V,u)) - half_V) < 1e-6 &&
                             abs(Float64(positive_areaofcut(W,u)) - half_W) < 1e-6 &&
-                            abs(Float64(positive_areaofcut(X,u)) - half_X) < 1e-6 && v[4] >= 1e-20)
+                            abs(Float64(positive_areaofcut(X,u)) - half_X) < 1e-6 )
                             push!(solutions, v)
                         end
                     end
@@ -356,32 +356,135 @@ function ham_sandwich(P,Q,T)
 end
 
 
+# function main()
+#     V1 = [
+#     [0, 0, 0],
+#     [1, 0, 0],
+#     [0, 1, 0],
+#     [0, 0, 1]
+#     ]
+    
+#     V2 = [
+#     [1, 0, 0],
+#     [2, 0, 0],
+#     [1, 1, 0],
+#     [1, 0, 1]
+#     ]
+    
+#     V3 = [
+#     [0, 1, 0],
+#     [1, 1, 0],
+#     [0, 2, 0],
+#     [0, 1, 1]
+#     ]
+    
+    
+#     P = convex_hull(QQ, V1)
+#     Q = convex_hull(QQ, V2)
+#     T = convex_hull(QQ, V3)
+#     println(ham_sandwich(P,Q, T))
+# end
+# main()
+
+# function main()
+#     V_bread = [
+#     [QQ(-9,5),  QQ(-3,2),   QQ(4,5)],
+#     [QQ(2,1),   QQ(-4,5),   QQ(4,5)],
+#     [QQ(-3,10), QQ(19,10),  QQ(4,5)],
+#     [QQ(-9,5),  QQ(-3,2),   QQ(1,1)],
+#     [QQ(2,1),   QQ(-4,5),   QQ(1,1)],
+#     [QQ(-3,10), QQ(19,10),  QQ(1,1)]
+#     ]
+    
+#     # ===== Cream cheese: thin layer, inset ~0.2 units from the bread's edge =====
+#     V_cheese = [
+#         [QQ(-8,5),   QQ(-33,25), QQ(1,1)],
+#         [QQ(89,50),  QQ(-17,25), QQ(1,1)],
+#         [QQ(-7,25),  QQ(42,25),  QQ(1,1)],
+#         [QQ(-8,5),   QQ(-33,25), QQ(27,25)],
+#         [QQ(89,50),  QQ(-17,25), QQ(27,25)],
+#         [QQ(-7,25),  QQ(42,25),  QQ(27,25)]
+#     ]
+    
+#     # ===== Smoked salmon: triangular base, irregular hand-set upper vertices =====
+#     V_salmon = [
+#         [QQ(-3,2),   QQ(-23,20), QQ(27,25)],
+#         [QQ(17,10),  QQ(-11,20), QQ(27,25)],
+#         [QQ(-1,4),   QQ(31,20),  QQ(27,25)],
+#         [QQ(-23,20), QQ(-11,20), QQ(131,100)],
+#         [QQ(3,4),    QQ(-17,20), QQ(31,25)],
+#         [QQ(1,20),   QQ(3,4),    QQ(27,20)]
+#     ]
+    
+#     P = convex_hull(QQ, V_bread)
+#     Q = convex_hull(QQ, V_salmon)
+#     T = convex_hull(QQ, V_cheese)
+#     sol = ham_sandwich(P,Q, T)
+#     println(sol)
+#     @time sol
+# end
+# main()
+
 function main()
-    V1 = [
-    [0, 0, 0],
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 0, 1]
-    ]
-    
-    V2 = [
-    [1, 0, 0],
-    [2, 0, 0],
-    [1, 1, 0],
-    [1, 0, 1]
-    ]
-    
-    V3 = [
-    [0, 1, 0],
-    [1, 1, 0],
-    [0, 2, 0],
-    [0, 1, 1]
-    ]
-    
-    
-    P = convex_hull(QQ, V1)
-    Q = convex_hull(QQ, V2)
-    T = convex_hull(QQ, V3)
-    println(ham_sandwich(P,Q, T))
+V_bread = [
+    [QQ(-2,1),   QQ(-3,2),   QQ(4,5)],
+    [QQ(5,2),    QQ(-4,5),   QQ(4,5)],
+    [QQ(-3,10),  QQ(19,10),  QQ(4,5)],
+    [QQ(-2,1),   QQ(-3,2),   QQ(1,1)],
+    [QQ(5,2),    QQ(-4,5),   QQ(1,1)],
+    [QQ(-3,10),  QQ(19,10),  QQ(1,1)]
+]
+
+# ===== Cream cheese: thin layer, inset ~0.2 units, non-uniform scaling from bread =====
+V_cheese = [
+    [QQ(-8,5),   QQ(-33,25), QQ(101,100)],
+    [QQ(9,4),    QQ(-4,5),   QQ(101,100)],
+    [QQ(-9,25),  QQ(42,25),  QQ(101,100)],
+    [QQ(-8,5),   QQ(-33,25), QQ(27,25)],
+    [QQ(9,4),    QQ(-4,5),   QQ(27,25)],
+    [QQ(-9,25),  QQ(42,25),  QQ(27,25)]
+]
+
+# ===== Smoked salmon: triangular base, irregular hand-set upper vertices =====
+V_salmon = [
+    [QQ(-3,2),   QQ(-23,20), QQ(28,25)],
+    [QQ(21,10),  QQ(-1,2),   QQ(28,25)],
+    [QQ(-1,4),   QQ(31,20),  QQ(28,25)],
+    [QQ(-23,20), QQ(-11,20), QQ(131,100)],
+    [QQ(3,4),    QQ(-17,20), QQ(31,25)],
+    [QQ(1,20),   QQ(3,4),    QQ(27,20)]
+]
+    P = convex_hull(QQ, V_bread)
+    Q = convex_hull(QQ, V_salmon)
+    T = convex_hull(QQ, V_cheese)
+
+    area_P = areaofpolytope(V_bread)
+    area_Q = areaofpolytope(V_salmon)
+    area_T = areaofpolytope(V_cheese)
+
+    println("Area of bread = ", area_P, " ≈ ", Float64(area_P))
+    println("Area of salmon = ", area_Q, " ≈ ", Float64(area_Q))
+    println("Area of cheese = ", area_T, " ≈ ", Float64(area_T))
+    println("Half area of bread = ", area_P // 2, " ≈ ", Float64(area_P // 2))
+    println("Half area of salmon = ", area_Q // 2," ≈ ", Float64(area_Q // 2))
+    println("Half area of cheese = ", area_T // 2," ≈ ", Float64(area_T // 2))
+
+    solutions = ham_sandwich(P,Q,T)
+    println("Ham sandwich solutions: ", solutions)
+
+    for (i, sol) in enumerate(solutions)
+        a0 = QQ(rationalize(sol[1]))
+        b0 = QQ(rationalize(sol[2]))
+        c0 = QQ(rationalize(sol[3]))
+        d0 = QQ(rationalize(sol[4]))
+        cut_P = positive_areaofcut(V_bread, [a0, b0, c0,d0])
+        cut_Q = positive_areaofcut(V_salmon, [a0, b0, c0,d0])
+        cut_T = positive_areaofcut(V_cheese, [a0, b0, c0,d0])
+        println("\nSolution $i: a=$a0, b=$b0, c=$c0, d =$d0")
+        println("  Area cut of P = ", Float64(cut_P), " (target = ", area_P//2," ≈ ",  Float64(area_P//2),")")
+        println("  Area cut of Q = ", Float64(cut_Q), " (target = ", area_Q//2," ≈ ",  Float64(area_Q//2),")")
+        println("  Area cut of T = ", Float64(cut_T), " (target = ", area_T//2," ≈ ",  Float64(area_T//2),")")
+    end
 end
+
 main()
