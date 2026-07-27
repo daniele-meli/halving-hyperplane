@@ -1,5 +1,5 @@
-This repository contains supplementary material for the master thesis
-"Computing Ham-Sandwich Cuts for Polytopes".
+This repository contains the implementation of the algorithms explained in the master's thesis
+"Computing Ham-Sandwich Cuts for Polytopes" written by Melissa Daniele.
 
 Brief Description of the Files:
 The implementation is written in Julia. We use Oscar.jl for computations
