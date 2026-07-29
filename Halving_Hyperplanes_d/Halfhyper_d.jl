@@ -39,16 +39,16 @@ end
 
 # PRE: V is a collection of vertices spanning a polytope, and h is a vector of
 #      coefficients defining the hyperplane H = {x : h ⋅ (x, -1) = 0}.
-# POST: Returns the edges of the convex hull of V whose endpoints lie on
+# POST: Returns the facets of the convex hull of V whose endpoints lie on
 #       opposite sides of H (or with one endpoint on H), i.e., the edges
 #       intersected by the hyperplane H.
 function hyperplane_intersect(V,h)
 	P = convex_hull(QQ,V)
 	cut = []
     
-	for e in faces(P, Oscar.ambient_dim(P)-1)
-        #println(e)
-		s = [inner_product(collect(v),h) for v in vertices(e)]
+	for facet in faces(P, Oscar.ambient_dim(P)-1)
+        #println(facet)
+		s = [inner_product(collect(v),h) for v in vertices(facet)]
         t = 0
         #find the first non-zero value in the vector s
         for i in 1:length(s)
@@ -66,10 +66,10 @@ function hyperplane_intersect(V,h)
             end
         end
         if is_cut
-            push!(cut,e)
+            push!(cut,facet)
         end
 	end
-	return cut #Chiara: this now outputs two edges instead of just the indices of the corresponding vertices
+	return cut 
 end
     
 # PRE: V is a collection of vertices spanning a polytope, and h is a vector of
@@ -81,7 +81,7 @@ function hyperplane_intersectpoints(V,h)
     newpoints = Vector{Vector{QQFieldElem}}()
     points = Vector{Vector{QQFieldElem}}()
     for facet in facets
-        for f in faces(facet,Oscar.ambient_dim(facet)-2)
+        for f in faces(facet, 1)
             v = [collect(vv) for vv in vertices(f)]
             s1 = inner_product(v[2],h)
             s2 = inner_product(v[1],h)
@@ -103,7 +103,7 @@ end
 # PRE: V is a collection of vertices spanning a polytope, and h is a vector of
 #      coefficients defining the hyperplane H = {x : h ⋅ (x, -1) = 0}.
 # POST: Returns the volume of P(h < 0), i.e. P ∩ {x : h ⋅ (x,-1) < 0}.
-function negative_areaofcut(V,h)
+function negative_volumeofcut(V,h)
     newpoints = hyperplane_intersectpoints(V,h)
     points = Vector{Vector{QQFieldElem}}()
     for v in V
@@ -247,7 +247,7 @@ function local_volume(V,h)
         sx_sym = points_sym[index]
         #println(sx)
         volume_num += vol_simplex(sx_num, QQ)
-        volume_sym += vol_simplex(sx_sym, S)
+        volume_sym += sign(vol_simplex(sx_num, QQ))*vol_simplex(sx_sym, S)
     end
     volume = (num = volume_num, sym = volume_sym)
     return volume
@@ -268,11 +268,8 @@ function volume_functions(V)
         ch = item.chamber
         
         vol = local_volume(V,h)
-        vol_num = vol.num
-        vol_sym = vol.sym
-        volume = sign(vol_num)*vol_sym
         
-        push!(functions, (chamber = ch, repr = h, local_vol = volume))
+        push!(functions, (chamber = ch, repr = h, local_vol = vol.sym))
     end
     return functions
 end
@@ -323,9 +320,8 @@ function oscar_to_homcon(f,vars)
 end
 
 # PRE: P_1,...,P_n are polytopes in R^d with n <= d and non-zero volume.
-# POST: Returns coefficient vectors h defining hyperplanes H = {x :
-#       h ⋅ (x,-1) = 0} such that each H divides every polytope P_i into two
-#       regions of equal volume.
+# POST: Returns coefficient vectors h defining hyperplanes H = {x :h ⋅ (x,-1) = 0} 
+#       such that each H cuts every polytope P_i into a region of volume alpha_i * vol(P_i).
 function ham_sandwich(polytopes)
     d = Oscar.dim(polytopes[1])
     @assert(length(polytopes) <= d)
@@ -345,13 +341,9 @@ function ham_sandwich(polytopes)
     vars = collect(h)
     solutions = []
     
-    for combinations in Iterators.product([Lp for Lp in L])
+    for combinations in Iterators.product(L...)
         combinations = collect(combinations)
-        println("Type of combinations: ", typeof(combinations))
-        println("First element: ", combinations[1])
-        println("Type of first element: ", typeof(combinations[1]))
-        break  # just check the first one
-        fcts_hc = []
+        fcts_hc = HomotopyContinuation.Expression[]
         skip = false
 
         for tuple in combinations
@@ -374,7 +366,7 @@ function ham_sandwich(polytopes)
             for sol in points
                if sol in cc
                 coeff = [QQ(rationalize(BigFloat(x))) for x in sol]
-                cuts = [Float64(negative_areaofcut(V, coeff)) for V in vertices_list]
+                cuts = [Float64(nnegative_volumeofcut(V, coeff)) for V in vertices_list]
                     if all(abs(cuts[i] - halves[i]) < 1e-6 for i in 1:length(polytopes))
                         push!(solutions, sol)
                     end
@@ -416,36 +408,115 @@ end
 # end
 # main()
 
+# function main()
+#     V1 = [
+#         [QQ(4), QQ(1)],
+#         [QQ(5), QQ(3)],
+#         [QQ(2), QQ(4)],
+#         [QQ(0), QQ(2)],
+#         [QQ(1), QQ(1)]
+#     ]
+
+#     V2 = [
+#         [QQ(-4), QQ(-3)],
+#         [QQ(-2), QQ(-1)],
+#         [QQ(1), QQ(-2)],
+#         [QQ(2), QQ(-5)],
+#         [QQ(-1), QQ(-6)],
+#         [QQ(-3), QQ(-5)]
+#     ]
+
+#     P = convex_hull(QQ,V1)
+#     Q = convex_hull(QQ,V2)
+
+#     solutions = ham_sandwich([P,Q])
+
+#     println("Number of solutions: ", length(solutions))
+
+#     for (i,sol) in enumerate(solutions)
+#         println("\nSolution $i")
+#         println("h = ", sol)
+
+#         println("P cut volume = ",
+#             Float64(negative_volumeofcut(V1,
+#             [QQ(rationalize(BigFloat(x))) for x in sol])))
+
+#         println("Q cut volume = ",
+#             Float64(negative_volumeofcut(V2,
+#             [QQ(rationalize(BigFloat(x))) for x in sol])))
+
+#         println("Expected P half = ",
+#             Float64(areaofpolyhedra(V1)/2))
+
+#         println("Expected Q half = ",
+#             Float64(areaofpolyhedra(V2)/2))
+#     end
+# end
+# main()
+
 function main()
+
+# --- Build the three tetrahedra ---
     V1 = [
-        [QQ(4), QQ(1)],
-        [QQ(5), QQ(3)],
-        [QQ(2), QQ(4)],
-        [QQ(0), QQ(2)],
-        [QQ(1), QQ(1)]
+        [QQ(0), QQ(0), QQ(0)],
+        [QQ(1), QQ(0), QQ(0)],
+        [QQ(0), QQ(1), QQ(0)],
+        [QQ(0), QQ(0), QQ(1)]
     ]
-    
     V2 = [
-        [QQ(-4), QQ(-3)],
-        [QQ(-2), QQ(-1)],
-        [QQ(1), QQ(-2)],
-        [QQ(2), QQ(-5)],
-        [QQ(-1), QQ(-6)],
-        [QQ(-3), QQ(-5)]
+        [QQ(2), QQ(0), QQ(0)],
+        [QQ(3), QQ(0), QQ(0)],
+        [QQ(2), QQ(1), QQ(0)],
+        [QQ(2), QQ(0), QQ(1)]
+    ]
+    V3 = [
+        [QQ(0), QQ(2), QQ(0)],
+        [QQ(1), QQ(2), QQ(0)],
+        [QQ(0), QQ(3), QQ(0)],
+        [QQ(0), QQ(2), QQ(1)]
     ]
     
-    P = convex_hull(QQ, V1)
-    Q = convex_hull(QQ, V2)
+    # Create Oscar polytopes
+    P1 = convex_hull(QQ, V1)
+    P2 = convex_hull(QQ, V2)
+    P3 = convex_hull(QQ, V3)
+    polytopes = [P1, P2, P3]
+    vertex_sets = [V1, V2, V3]
     
-    solutions = ham_sandwich([P, Q])
+    # --- Volumes (3D analogue of "area") ---
+    vol_P1 = areaofpolyhedra(V1)
+    vol_P2 = areaofpolyhedra(V2)
+    vol_P3 = areaofpolyhedra(V3)
+    
+    println("Volume of P1 = ", vol_P1, " ≈ ", Float64(vol_P1))
+    println("Volume of P2 = ", vol_P2, " ≈ ", Float64(vol_P2))
+    println("Volume of P3 = ", vol_P3, " ≈ ", Float64(vol_P3))
+    
+    println("Half volume of P1 = ", vol_P1 // 2, " ≈ ", Float64(vol_P1 // 2))
+    println("Half volume of P2 = ", vol_P2 // 2, " ≈ ", Float64(vol_P2 // 2))
+    println("Half volume of P3 = ", vol_P3 // 2, " ≈ ", Float64(vol_P3 // 2))
+    
+    # --- Ham sandwich cut: now a plane a*x + b*y + c*z = d bisecting all three solids ---
+    solutions = ham_sandwich(polytopes)
     println("Ham sandwich solutions: ", solutions)
     
     for (i, sol) in enumerate(solutions)
-        println("\nSolution $i: h = (", sol[1], ", ", sol[2], "), t = ", sol[3])
-        println("  Area cut of P = ", Float64(negative_areaofcut(V1, sol)))
-        println("  Area cut of Q = ", Float64(negative_areaofcut(V2, sol)))
-        println("  Half area of P = ", Float64(areaofpolyhedra(V1)/2))
-        println("  Half area of Q = ", Float64(areaofpolyhedra(V2)/2))
+        a0 = QQ(rationalize(sol[1]))
+        b0 = QQ(rationalize(sol[2]))
+        c0 = QQ(rationalize(sol[3]))
+        d0 = QQ(rationalize(sol[4]))
+    
+        cut_P1 = negative_volumeofcut(V1, a0, b0, c0, d0)
+        cut_P2 = negative_volumeofcut(V2, a0, b0, c0, d0)
+        cut_P3 = negative_volumeofcut(V3, a0, b0, c0, d0)
+    
+        println("\nSolution $i: a=$a0, b=$b0, c=$c0, d=$d0")
+        println("  Volume cut of P1 = ", Float64(cut_P1),
+                " (target = ", vol_P1 // 2, " ≈ ", Float64(vol_P1 // 2), ")")
+        println("  Volume cut of P2 = ", Float64(cut_P2),
+                " (target = ", vol_P2 // 2, " ≈ ", Float64(vol_P2 // 2), ")")
+        println("  Volume cut of P3 = ", Float64(cut_P3),
+                " (target = ", vol_P3 // 2, " ≈ ", Float64(vol_P3 // 2), ")")
     end
 end
 main()

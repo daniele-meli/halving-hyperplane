@@ -241,7 +241,7 @@ function local_volume(V,h)
         sx_sym = points_sym[index]
         #println(sx)
         volume_num += vol_simplex(sx_num, QQ)
-        volume_sym += vol_simplex(sx_sym, S)
+        volume_sym += sign(vol_simplex(sx_num, QQ))*vol_simplex(sx_sym, S)
     end
     volume = (num = volume_num, sym = volume_sym)
     return volume
@@ -263,9 +263,9 @@ function volume_functions(V)
         vol = local_volume(V,h)
         vol_num = vol.num
         vol_sym = vol.sym
-        volume = sign(vol_num)*vol_sym
+        #volume = sign(vol_num)*vol_sym
         
-        push!(functions, (chamber = ch, repr = h, local_vol = volume))
+        push!(functions, (chamber = ch, repr = h, local_vol = vol_sym))
     end
     return functions
 end
@@ -410,74 +410,35 @@ end
 # end
 # main()
 
-# function main()
-#     V_bread = [
-#     [QQ(-9,5),  QQ(-3,2),   QQ(4,5)],
-#     [QQ(2,1),   QQ(-4,5),   QQ(4,5)],
-#     [QQ(-3,10), QQ(19,10),  QQ(4,5)],
-#     [QQ(-9,5),  QQ(-3,2),   QQ(1,1)],
-#     [QQ(2,1),   QQ(-4,5),   QQ(1,1)],
-#     [QQ(-3,10), QQ(19,10),  QQ(1,1)]
-#     ]
-    
-#     # ===== Cream cheese: thin layer, inset ~0.2 units from the bread's edge =====
-#     V_cheese = [
-#         [QQ(-8,5),   QQ(-33,25), QQ(1,1)],
-#         [QQ(89,50),  QQ(-17,25), QQ(1,1)],
-#         [QQ(-7,25),  QQ(42,25),  QQ(1,1)],
-#         [QQ(-8,5),   QQ(-33,25), QQ(27,25)],
-#         [QQ(89,50),  QQ(-17,25), QQ(27,25)],
-#         [QQ(-7,25),  QQ(42,25),  QQ(27,25)]
-#     ]
-    
-#     # ===== Smoked salmon: triangular base, irregular hand-set upper vertices =====
-#     V_salmon = [
-#         [QQ(-3,2),   QQ(-23,20), QQ(27,25)],
-#         [QQ(17,10),  QQ(-11,20), QQ(27,25)],
-#         [QQ(-1,4),   QQ(31,20),  QQ(27,25)],
-#         [QQ(-23,20), QQ(-11,20), QQ(131,100)],
-#         [QQ(3,4),    QQ(-17,20), QQ(31,25)],
-#         [QQ(1,20),   QQ(3,4),    QQ(27,20)]
-#     ]
-    
-#     P = convex_hull(QQ, V_bread)
-#     Q = convex_hull(QQ, V_salmon)
-#     T = convex_hull(QQ, V_cheese)
-#     sol = ham_sandwich(P,Q, T)
-#     println(sol)
-#     @time sol
-# end
-# main()
-
 function main()
-V_bread = [
-    [QQ(-2,1),   QQ(-3,2),   QQ(4,5)],
-    [QQ(5,2),    QQ(-4,5),   QQ(4,5)],
-    [QQ(-3,10),  QQ(19,10),  QQ(4,5)],
-    [QQ(-2,1),   QQ(-3,2),   QQ(1,1)],
-    [QQ(5,2),    QQ(-4,5),   QQ(1,1)],
-    [QQ(-3,10),  QQ(19,10),  QQ(1,1)]
-]
-
-# ===== Cream cheese: thin layer, inset ~0.2 units, non-uniform scaling from bread =====
-V_cheese = [
-    [QQ(-8,5),   QQ(-33,25), QQ(101,100)],
-    [QQ(9,4),    QQ(-4,5),   QQ(101,100)],
-    [QQ(-9,25),  QQ(42,25),  QQ(101,100)],
-    [QQ(-8,5),   QQ(-33,25), QQ(27,25)],
-    [QQ(9,4),    QQ(-4,5),   QQ(27,25)],
-    [QQ(-9,25),  QQ(42,25),  QQ(27,25)]
-]
-
-# ===== Smoked salmon: triangular base, irregular hand-set upper vertices =====
-V_salmon = [
-    [QQ(-3,2),   QQ(-23,20), QQ(28,25)],
-    [QQ(21,10),  QQ(-1,2),   QQ(28,25)],
-    [QQ(-1,4),   QQ(31,20),  QQ(28,25)],
-    [QQ(-23,20), QQ(-11,20), QQ(131,100)],
-    [QQ(3,4),    QQ(-17,20), QQ(31,25)],
-    [QQ(1,20),   QQ(3,4),    QQ(27,20)]
-]
+    V_bread = [
+        [QQ(-2,1),   QQ(-3,2),   QQ(4,5)],
+        [QQ(5,2),    QQ(-4,5),   QQ(4,5)],
+        [QQ(-3,10),  QQ(19,10),  QQ(4,5)],
+        [QQ(-2,1),   QQ(-3,2),   QQ(1,1)],
+        [QQ(5,2),    QQ(-4,5),   QQ(1,1)],
+        [QQ(-3,10),  QQ(19,10),  QQ(1,1)]
+    ]
+    
+    # ===== Cream cheese: thin layer, inset ~0.2 units, non-uniform scaling from bread =====
+    V_cheese = [
+        [QQ(-8,5),   QQ(-33,25), QQ(101,100)],
+        [QQ(9,4),    QQ(-4,5),   QQ(101,100)],
+        [QQ(-9,25),  QQ(42,25),  QQ(101,100)],
+        [QQ(-8,5),   QQ(-33,25), QQ(27,25)],
+        [QQ(9,4),    QQ(-4,5),   QQ(27,25)],
+        [QQ(-9,25),  QQ(42,25),  QQ(27,25)]
+    ]
+    
+    # ===== Smoked salmon: triangular base, irregular hand-set upper vertices =====
+    V_salmon = [
+        [QQ(-3,2),   QQ(-23,20), QQ(28,25)],
+        [QQ(21,10),  QQ(-1,2),   QQ(28,25)],
+        [QQ(-1,4),   QQ(31,20),  QQ(28,25)],
+        [QQ(-23,20), QQ(-11,20), QQ(131,100)],
+        [QQ(3,4),    QQ(-17,20), QQ(31,25)],
+        [QQ(1,20),   QQ(3,4),    QQ(27,20)]
+    ]
     P = convex_hull(QQ, V_bread)
     Q = convex_hull(QQ, V_salmon)
     T = convex_hull(QQ, V_cheese)

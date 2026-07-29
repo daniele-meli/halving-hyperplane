@@ -1,9 +1,9 @@
-This repository contains the implementation of the algorithms explained in the master's thesis
+This repository contains the implementation of the algorithms presented in the master's thesis
 "Computing Ham-Sandwich Cuts for Polytopes".
 
 Brief Description of the Files:
 The implementation is written in Julia. We use Oscar.jl for computations
-in algebraic geometry and HomotopyContinuation.jl for solving the polynomial
+in algebraic geometry, and HomotopyContinuation.jl for solving the polynomial
 systems arising from the algorithm.
 
 The repository is organised into three folders:
@@ -16,5 +16,5 @@ The repository is organised into three folders:
                                Contains a Jupyter notebook illustrating the
                                computation of halving hyperplanes.
 
-    Halving_Hyperplanes_d/: General implementation for arbitrary fixed
-                            dimension.
+    Halving_Hyperplanes_d/:    General implementation for arbitrary fixed dimension. 
+                               Also includes an implementation for arbitrary α-proportions.
